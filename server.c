@@ -82,6 +82,8 @@ char *getIPAddress(int s, bool local_or_remote) {
     return inet_ntoa(addr.sin_addr);
 }
 
+void byebye(struct _client *);
+
 /**
  * Initializare socket
  */
@@ -208,6 +210,8 @@ void read_database() {
     char line[256];
     while (fgets(line, 255, database) != NULL && !feof(database)) {
         char *split = strstr(line, "|");
+        if(!split) continue;
+
         *split = '\0';
         char *username = line;
         char *password = split + 1;
@@ -296,6 +300,7 @@ void removeConnection(struct _client *connection) {
  */
 void connectionKilled(struct _client *connection) {
     printf("<PAD-CHAT>: clientul %d a intrerupt conexiunea\n", connection->fd);
+    byebye(connection);
 
     /**
      * Sterge din vectorul de clienti
@@ -545,6 +550,29 @@ bool specialCommand(struct _client *client) {
     return false;
 }
 
+
+
+/**
+ * Ia la revedere de la client si anunta pe restul de plecarea lui
+ * @param client
+ */
+void byebye(struct _client *client) {
+    /**
+     * Mesaj lui
+     */
+    sprintf(buf, "Bye bye!!! Disconnecting...\n", client->fd, getIPAddress(client->fd, false));
+    send(client->fd, buf, strlen(buf) + 1, 0);
+
+    /**
+     * Mesaj celorlalti
+     */
+    size_t read = sprintf(tmpbuf, "\"%s\" s-a deconectat din chat\n", client->username, false);
+    current_connection = client->fd;
+    sendToALL(tmpbuf, read);
+    current_connection = -1;
+}
+
+
 /**
  * Verific daca userul cere sa fie deconectat. Daca da inchid socket-ul
  * @param client
@@ -555,19 +583,7 @@ bool checkDisconnection(struct _client *client) {
      * Verificam daca e o cerere de deconectare
      */
     if ((strncasecmp("QUIT\n", buf, 4) == 0)) {
-        /**
-         * Mesaj lui
-         */
-        sprintf(buf, "Bye bye!!! Disconnecting...\n", client->fd, getIPAddress(client->fd, false));
-        send(client->fd, buf, strlen(buf) + 1, 0);
-
-        /**
-         * Mesaj celorlalti
-         */
-        size_t read = sprintf(tmpbuf, "\"%s\" s-a deconectat din chat\n", client->username, false);
-        current_connection = client->fd;
-        sendToALL(tmpbuf, read);
-        current_connection = -1;
+        byebye(client);
 
         removeConnection(client);
 
@@ -689,7 +705,6 @@ void create_connection() {
 
             char *message = "Your ip is banned and you are not allowed to connect again!";
             send(newfd, message, strlen(message), 0);
-            free(message);
         }
     }
 }
